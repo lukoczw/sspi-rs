@@ -200,6 +200,15 @@ impl Username {
         })
     }
 
+    /// Takes the `account_name` without any subdomain.
+    pub fn new_account_name(account_name: &str) -> Self {
+        Self {
+            value: account_name.to_owned(),
+            format: UserNameFormat::DownLevelLogonName,
+            sep_idx: None,
+        }
+    }
+
     /// Attempts to guess the right name format for the account name/domain combo
     ///
     /// If no netbios domain name is provided, or if it is an empty string, the username will
@@ -964,5 +973,28 @@ mod tests {
             UsernameParts::DownLevelLogonName(dlln) if dlln.netbios_domain().is_none()
         ));
         assert!(empty_domain.eq_ignore_ascii_case(&bare));
+    }
+
+    #[test]
+    fn account_name_keeps_separators_out_of_the_domain() {
+        for value in [r"one\two", "one@two", r"one\two@three", "plain"] {
+            let username = Username::new_account_name(value);
+
+            assert_eq!(username.inner(), value);
+            assert_eq!(username.format(), UserNameFormat::DownLevelLogonName);
+            assert!(matches!(
+                username.parts(),
+                UsernameParts::DownLevelLogonName(dlln)
+                    if dlln.account_name() == value && dlln.netbios_domain().is_none()
+            ));
+
+            let buffers = AuthIdentityBuffers::from(AuthIdentity {
+                username,
+                password: String::new().into(),
+            });
+
+            assert_eq!(buffers.user.to_string(), value);
+            assert!(buffers.domain.is_empty());
+        }
     }
 }
